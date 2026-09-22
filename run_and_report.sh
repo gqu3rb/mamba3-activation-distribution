@@ -22,19 +22,44 @@
 # file is sourced, shell options leak into the interactive shell and outlive the script.
 
 _rar_main() {
-    local HERE MODEL TASKS TAG OUT OUTDIR METRICS LOG RAW JOBID RC
+    # Each config variable is seeded from the caller's environment: a bare `local MODEL`
+    # would create it EMPTY, so the `${MODEL:-default}` lines below would silently ignore
+    # `MODEL=... ./run_and_report.sh` and fall back to the Mamba-3 defaults. The RHS of
+    # `local X="$X"` is expanded in the caller's scope, before the local is created, which
+    # keeps the override working while still not leaking into a sourcing shell.
+    local HERE LOG RAW JOBID RC
+    local MODEL="${MODEL-}" TASKS="${TASKS-}" TAG="${TAG-}"
+    local OUT="${OUT-}" OUTDIR="${OUTDIR-}" METRICS="${METRICS-}"
 
     HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
     # Recompute the same defaults mamba3_run_ref.sh uses, so this wrapper knows where the
     # job will put its artifacts. Anything already exported wins in both places.
+    #MODEL="${MODEL:-state-spaces/mamba2-130m}"
     MODEL="${MODEL:-state-spaces/mamba3-mimo-187m}"
     TASKS="${TASKS:-lambada_openai}"
+    #TASKS="${TASKS:-lambada_openai,hellaswag,piqa,arc_easy,arc_challenge,winogrande,openbookqa}"
     TAG="${TAG:-$(basename "$MODEL")_${TASKS//,/-}}"
     OUT="${OUT:-$HERE/tap_stats_${TAG}.pt}"
     OUTDIR="${OUTDIR:-$HERE/results_${TAG}}"
     METRICS="${METRICS:-$HERE/metrics_${TAG}.json}"
-    export MODEL TASKS TAG OUT OUTDIR METRICS
+    TOKENIZER="${TOKENIZER:-meta-llama/Llama-3.1-8B}"
+    #TOKENIZER="${TOKENIZER:-EleutherAI/gpt-neox-20b}" # for mamba2
+    export MODEL TASKS TAG OUT OUTDIR METRICS TOKENIZER
+
+    # A Mamba-2/Mamba-3 checkpoint paired with the other family's tokenizer is a vocab
+    # mismatch: it does not crash, it just returns nonsense (perplexity ~4.6e5, accuracy at
+    # chance). Refuse rather than burn a GPU job producing numbers that look like data.
+    case "$MODEL" in
+        *mamba3*) local want="meta-llama/Llama-3.1-8B" ;;
+        *mamba2*|*mamba-2*) local want="EleutherAI/gpt-neox-20b" ;;
+        *) local want="" ;;
+    esac
+    if [ -n "$want" ] && [ -n "${TOKENIZER:-}" ] && [ "${TOKENIZER}" != "$want" ]; then
+        echo "ERROR: MODEL=$MODEL expects TOKENIZER=$want but TOKENIZER=$TOKENIZER" >&2
+        echo "       (mismatched tokenizers produce plausible-looking garbage, not an error)" >&2
+        return 2
+    fi
 
     LOG="$HERE/mamba3_distribution_${TAG}_$(date +%Y%m%d_%H%M%S).log"
 
