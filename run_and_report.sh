@@ -11,6 +11,7 @@
 #   ./run_and_report.sh
 #   TASKS=hellaswag LIMIT=512 ./run_and_report.sh
 #   MODEL=state-spaces/mamba3-siso-187m TAG=siso ./run_and_report.sh
+#   GEN_AVG=0 ./run_and_report.sh     # skip gen_avg.sh (the layer-pooled _avg.csv)
 #
 # Every knob mamba3_run_ref.sh reads (MODEL, TASKS, LIMIT, BATCH_SIZE, TAP_STRIDE, TAG,
 # OUT, OUTDIR, METRICS, ...) is forwarded, because --export=ALL passes this shell's env.
@@ -36,7 +37,8 @@ _rar_main() {
     # Recompute the same defaults mamba3_run_ref.sh uses, so this wrapper knows where the
     # job will put its artifacts. Anything already exported wins in both places.
     #MODEL="${MODEL:-state-spaces/mamba2-130m}"
-    MODEL="${MODEL:-state-spaces/mamba3-mimo-187m}"
+    #MODEL="${MODEL:-state-spaces/mamba3-mimo-187m}"
+    MODEL="${MODEL:-$HOME/GithubMamba3Train/mamba3_training/hf_export/mamba3_fineweb_8L_mlp_reg1e-4}"
     TASKS="${TASKS:-lambada_openai}"
     #TASKS="${TASKS:-lambada_openai,hellaswag,piqa,arc_easy,arc_challenge,winogrande,openbookqa}"
     TAG="${TAG:-$(basename "$MODEL")_${TASKS//,/-}}"
@@ -88,9 +90,21 @@ _rar_main() {
 
     # Read the metrics back out of the job's own artifacts.
     python "$HERE/summarize_results.py" "$OUTDIR"
+
+    # Pool every layer of each tap into one row with gen_avg.sh (runs here, no GPU needed).
+    # gen_avg.sh calls its input IN and its output OUT, so this script's OUT (the .pt) is
+    # passed as IN. GEN_AVG=0 skips this step; AVG_MODE is forwarded through the env.
+    local AVG_CSV="${AVG_CSV:-${OUT%.pt}_avg.csv}"
+    if [ "${GEN_AVG:-1}" = 1 ] && [ -f "$OUT" ]; then
+        echo
+        IN="$OUT" OUT="$AVG_CSV" bash "$HERE/gen_avg.sh" \
+            || echo "WARNING: gen_avg.sh failed, $AVG_CSV was not written" >&2
+    fi
+
     echo
     echo "metrics json : $METRICS"
     echo "tap stats    : $OUT"
+    if [ "${GEN_AVG:-1}" = 1 ]; then echo "tap stats avg: $AVG_CSV"; fi
     echo "job log      : $LOG"
     return "$RC"
 }
