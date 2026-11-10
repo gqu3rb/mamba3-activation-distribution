@@ -34,6 +34,9 @@ LIMIT="${LIMIT-}"
 # Fold every N-th call at each tap site. 1 costs ~18 extra reductions per block per
 # forward; raise it if the job is too slow, the statistics barely move.
 TAP_STRIDE="${TAP_STRIDE:-1}"
+# 1 = also tap the residual stream, MLP and norm_f via forward hooks (block_taps.py), which
+# the tap() calls inside mamba3.py cannot see. 0 = mixer taps only, as before.
+BLOCK_TAPS="${BLOCK_TAPS:-0}"
 TAG="${TAG:-$(basename "$MODEL")_${TASKS//,/-}}"
 
 HERE=/home/m314510193/GithubMamba3Train/mamba3_distribution
@@ -73,10 +76,13 @@ export HF_HUB_OFFLINE=1
 
 LIMIT_ARG=()
 if [ -n "$LIMIT" ]; then LIMIT_ARG=(--limit "$LIMIT"); fi
+BLOCK_TAPS_ARG=()
+if [ "$BLOCK_TAPS" = 1 ]; then BLOCK_TAPS_ARG=(--block-taps); fi
 
 python "$HERE/collect_distribution.py" \
   --tap-out "$OUT" \
   --tap-stride "$TAP_STRIDE" \
+  "${BLOCK_TAPS_ARG[@]}" \
   -- \
   --model mamba \
   --model_args "pretrained=${MODEL},tokenizer=${TOKENIZER},dtype=${DTYPE},add_bos_token=${ADD_BOS}" \

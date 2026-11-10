@@ -4,17 +4,15 @@
 # Run on LOGIN NODE:
 #   ./gen_avg.sh
 #
-# No --gres here: distribution.py only reads the .pt with torch and never touches a GPU,
-# so asking for one would idle an allocation and queue longer for nothing. It still goes
-# through SLURM rather than running on the login node.
+# No --gres here: distribution.py only reads the .pt with torch and never touches a GPU.
 
 set -euo pipefail
 
 HERE=/home/m314510193/GithubMamba3Train/mamba3_distribution
 
 # ---------------------------- edit these ----------------------------------
-IN="${IN:-$HERE/tap_stats_mamba3-mimo-187m_lambada_openai.pt}"
-OUT="${OUT:-$HERE/tap_stats_mamba3-mimo-187m_lambada_openai_avg.csv}"
+IN="${IN:-$HERE/tap_stats_mamba3_fineweb_8L_mlp_reg1e-4_lambada_openai_blocktaps.pt}"
+OUT="${OUT:-$HERE/tap_stats_mamba3_fineweb_8L_mlp_reg1e-4_lambada_openai_blocktaps_avg.csv}"
 # pool: re-derive every metric from the summed histograms and pooled moments, i.e. the
 #       distribution of the whole stack. The only self-consistent choice -- the mean of
 #       twelve absmaxes is not an absmax.

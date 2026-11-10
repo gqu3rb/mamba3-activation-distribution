@@ -38,6 +38,8 @@ def main():
                     help="randomly subsample this many token-rows per tapped tensor")
     ap.add_argument("--tap-device", default=None,
                     help="where the accumulators live (default: the tensor's own device)")
+    ap.add_argument("--block-taps", action="store_true",
+                    help="also tap the residual stream, MLP and norm_f (see block_taps.py)")
     ap.add_argument("-h", "--help", action="store_true")
     mine, rest = ap.parse_known_args()
     if mine.help:
@@ -56,6 +58,10 @@ def main():
 
     from mamba_ssm.utils import tap
 
+    if mine.block_taps:
+        import block_taps
+        block_taps.patch_from_pretrained()
+
     print(f"[tap] mamba_ssm -> {tap.__file__}", flush=True)
     print(f"[tap] impl={tap.IMPL} stride={mine.tap_stride} "
           f"max_rows={mine.tap_max_rows}", flush=True)
@@ -64,6 +70,7 @@ def main():
         "argv": rest,
         "stride": mine.tap_stride,
         "max_rows": mine.tap_max_rows,
+        "block_taps": mine.block_taps,
     }
 
     argv_backup = sys.argv
